@@ -61,6 +61,22 @@
     box-shadow:inset 0 0 14px rgba(0,0,0,0.2);
   }
   .park-tree{position:absolute; font-size:1.5rem; filter:drop-shadow(0 2px 1px rgba(0,0,0,0.2));}
+
+  /* ---- lagoon-a-beach button + map ---- */
+  .beach-btn-row{margin-bottom:16px;}
+  .beach-btn{
+    font-family:inherit; font-weight:bold; font-size:0.9rem; border:3px solid #fff; border-radius:999px;
+    padding:10px 20px; cursor:pointer; background:rgba(255,255,255,0.22); color:#fff;
+    box-shadow:0 4px 0 rgba(0,0,0,0.2); transition:transform .08s ease;
+  }
+  .beach-btn:active{transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,0.2);}
+  .park-map.beach-map{background:linear-gradient(160deg,#fde68a,#f6c453);}
+  .beach-pool{
+    position:absolute; left:50%; top:50%; width:56%; height:40%; transform:translate(-50%,-50%);
+    background:radial-gradient(circle at 35% 30%, #7fe3f5, #0e8fbf);
+    border-radius:48% 52% 45% 55% / 55% 45% 55% 45%;
+    box-shadow:inset 0 0 16px rgba(0,0,0,0.2);
+  }
   .ride-pin{
     position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:2px;
     background:none; border:none; cursor:pointer; padding:0;
@@ -126,6 +142,9 @@
       <div class="my-photo-label">Tap for your photo!</div>
       <input type="file" accept="image/*" capture="user" id="myPhotoInput" style="display:none;">
     </div>
+    <div class="beach-btn-row">
+      <button class="beach-btn" id="goToBeachBtn">🏖️ Lagoon-A-Beach</button>
+    </div>
     <div class="park-map" id="parkMap">
       <div class="lagoon-water"></div>
       <span class="park-tree" style="left:4%; top:5%;">🌴</span>
@@ -133,6 +152,21 @@
       <span class="park-tree" style="left:4%; top:95%;">🌴</span>
       <span class="park-tree" style="left:95%; top:95%;">🌴</span>
       <div id="ridePinsLayer"></div>
+    </div>
+  </div>
+
+  <!-- ==== LAGOON-A-BEACH MAP ==== -->
+  <div class="screen" id="screen-beach">
+    <div class="beach-btn-row">
+      <button class="beach-btn" id="goToParkBtn">🎢 Back to the Park</button>
+    </div>
+    <div class="park-map beach-map" id="beachMap">
+      <div class="beach-pool"></div>
+      <span class="park-tree" style="left:4%; top:5%;">🌴</span>
+      <span class="park-tree" style="left:95%; top:5%;">☀️</span>
+      <span class="park-tree" style="left:4%; top:95%;">🏖️</span>
+      <span class="park-tree" style="left:95%; top:95%;">🌴</span>
+      <div id="beachPinsLayer"></div>
     </div>
   </div>
 
@@ -230,6 +264,16 @@ const RIDES = [
   { id:"puff",         name:"Puff the Little Fire Dragon",      emo:"🐲", color:"#fbbf24", category:"mild",    left:"33%", top:"30%" },
   { id:"ferriswheel",  name:"Ferris Wheel",                      emo:"🎡", color:"#ec4899", category:"mild",    left:"67%", top:"30%" },
 ];
+// Lagoon-A-Beach: its own map of water attractions, reached via the button
+// on the main park screen — reuses the same "water" phase script as
+// Rattlesnake Rapids/Tidal Wave, just a different set of named attractions.
+const BEACH_RIDES = [
+  { id:"wavepool",    name:"Wave Pool",       emo:"🌊", color:"#0ea5e9", category:"water", left:"50%", top:"18%" },
+  { id:"lazyriver",   name:"Lazy River",       emo:"🛟", color:"#0d9488", category:"water", left:"18%", top:"30%" },
+  { id:"twistyslide", name:"Twisty Slide",      emo:"🌀", color:"#7c3aed", category:"water", left:"82%", top:"30%" },
+  { id:"cannonball",  name:"Cannonball Cove",    emo:"🤿", color:"#1d4ed8", category:"water", left:"20%", top:"78%" },
+  { id:"splashzone",  name:"Kiddie Splash Zone",  emo:"🐳", color:"#fbbf24", category:"mild",  left:"80%", top:"78%" },
+];
 const CATEGORY_LABEL = { coaster:"Roller Coaster", water:"Water Ride", sky:"Sky Ride", mild:"Family Ride" };
 
 // Each phase: { text, emo (optional swap), shake (optional), sounds (fn) }
@@ -268,10 +312,10 @@ function phasesFor(ride){
   ];
 }
 
-function renderRideMap(){
-  const layer = document.getElementById("ridePinsLayer");
+function renderRideMap(rides, layerId){
+  const layer = document.getElementById(layerId);
   layer.innerHTML = "";
-  RIDES.forEach(ride => {
+  rides.forEach(ride => {
     const pin = document.createElement("button");
     pin.className = "ride-pin";
     pin.style.left = ride.left;
@@ -287,9 +331,18 @@ function showScreen(id){
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById("screen-" + id).classList.add("active");
 }
+document.getElementById("goToBeachBtn").addEventListener("click", () => {
+  tone(500, 0, 0.1, "triangle", 0.1);
+  showScreen("beach");
+});
+document.getElementById("goToParkBtn").addEventListener("click", () => {
+  tone(500, 0, 0.1, "triangle", 0.1);
+  showScreen("park");
+});
 
 let rideTimeout = null;
 let currentRide = null;
+let rideOrigin = "park"; // which map screen to return to when the ride ends
 
 // Shows Oliver's own photo (if he's set one) riding along on the cart —
 // set once per ride start, doesn't change phase to phase since it's just him.
@@ -303,9 +356,11 @@ function renderRideCart(){
 
 function startRide(ride){
   currentRide = ride;
+  rideOrigin = document.getElementById("screen-beach").classList.contains("active") ? "beach" : "park";
   showScreen("ride");
   document.getElementById("rideViewName").textContent = ride.name;
   document.getElementById("rideDoneRow").style.display = "none";
+  document.getElementById("rideBackBtn").textContent = rideOrigin === "beach" ? "🏖️ Back to Beach" : "🏠 Back to Park";
   renderRideCart();
   playPhases(ride);
 }
@@ -350,10 +405,11 @@ document.getElementById("rideBackBtn").addEventListener("click", () => {
   clearTimeout(rideTimeout);
   currentRide = null;
   document.getElementById("rideView").classList.remove("shaking");
-  showScreen("park");
+  showScreen(rideOrigin);
 });
 
-renderRideMap();
+renderRideMap(RIDES, "ridePinsLayer");
+renderRideMap(BEACH_RIDES, "beachPinsLayer");
 </script>
 </body>
 </html>
