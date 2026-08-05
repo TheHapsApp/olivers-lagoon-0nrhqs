@@ -128,6 +128,21 @@
   .ride-btn.again{background:#fff;}
   .ride-btn.back{background:rgba(255,255,255,0.55);}
 
+  /* ---- camera / photo-choice modal ---- */
+  .camera-modal{
+    position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.75); padding:20px;
+  }
+  .camera-modal.show{display:flex;}
+  .camera-card{
+    background:#241a3d; border:4px solid #fff; border-radius:24px; padding:16px; max-width:340px; width:100%;
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+  }
+  .camera-close-btn{align-self:flex-end; background:none; border:none; color:#fff; font-size:1.3rem; cursor:pointer; margin:-8px -8px 0 0;}
+  .camera-msg{color:#fff; font-size:0.85rem; font-weight:bold; margin-top:-8px;}
+  .camera-video{width:100%; max-width:260px; border-radius:16px; background:#000; aspect-ratio:1/1; object-fit:cover; display:none;}
+  .camera-btn-row{display:flex; gap:10px; flex-wrap:wrap; justify-content:center;}
+
   footer{margin-top:26px; font-size:0.8rem; opacity:0.9; text-shadow:1px 1px 0 rgba(0,0,0,0.12);}
 </style>
 </head>
@@ -187,6 +202,23 @@
       <div class="ride-done-row" id="rideDoneRow" style="display:none;">
         <button class="ride-btn again" id="rideAgainBtn">🔁 Ride Again</button>
         <button class="ride-btn back" id="rideBackBtn">🏠 Back to Park</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==== PHOTO CHOICE / CAMERA MODAL ==== -->
+  <div class="camera-modal" id="cameraModal">
+    <div class="camera-card">
+      <button class="camera-close-btn" id="closeCameraModalBtn">✕</button>
+      <div class="camera-msg" id="cameraMsg">How do you want to add your photo?</div>
+      <video class="camera-video" id="cameraVideo" autoplay playsinline muted></video>
+      <div class="camera-btn-row" id="cameraChoiceRow">
+        <button class="ride-btn again" id="takeNewPhotoBtn">📷 Take a New Photo</button>
+        <button class="ride-btn back" id="chooseFileBtn">🗂️ Choose Existing Photo</button>
+      </div>
+      <div class="camera-btn-row" id="cameraCaptureRow" style="display:none;">
+        <button class="ride-btn again" id="captureBtn">📸 Snap It!</button>
+        <button class="ride-btn back" id="cancelCameraBtn">Cancel</button>
       </div>
     </div>
   </div>
@@ -265,30 +297,108 @@ function renderMyPhotoPreview(){
   const photo = loadMyPhoto();
   el.innerHTML = photo ? `<img src="${photo}" alt="Me">` : "📸";
 }
-document.getElementById("myPhotoBtn").addEventListener("click", () => {
-  tone(600, 0, 0.1, "triangle", 0.1);
-  document.getElementById("myPhotoInput").click();
-});
+function finishPhotoSave(dataUrl){
+  if (!dataUrl){
+    alert("Hmm, that photo didn't work — try again!");
+    return;
+  }
+  try {
+    saveMyPhoto(dataUrl);
+  } catch (err) {
+    alert("That photo couldn't be saved — try again!");
+    return;
+  }
+  renderMyPhotoPreview();
+  tone(700, 0, 0.1, "sine", 0.12);
+  tone(900, 0.1, 0.15, "sine", 0.12);
+}
+
 document.getElementById("myPhotoInput").addEventListener("change", (e) => {
   const file = e.target.files[0];
   e.target.value = ""; // so picking the same file again later still fires "change"
   if (!file) return;
-  shrinkImageFile(file, 240, (dataUrl) => {
-    if (!dataUrl){
-      alert("Hmm, that photo didn't work — try picking a different one!");
-      return;
-    }
-    try {
-      saveMyPhoto(dataUrl);
-    } catch (err) {
-      alert("That photo couldn't be saved — try again!");
-      return;
-    }
-    renderMyPhotoPreview();
-    tone(700, 0, 0.1, "sine", 0.12);
-    tone(900, 0.1, 0.15, "sine", 0.12);
-  });
+  shrinkImageFile(file, 240, finishPhotoSave);
 });
+
+// ---------- take-a-new-photo (webcam) ----------
+// For when there's no existing photo file on the device at all — lets Oliver
+// take a brand new one right in the browser instead, using the computer's
+// (or phone's) camera directly.
+let cameraStream = null;
+
+function resetPhotoModal(){
+  document.getElementById("cameraMsg").textContent = "How do you want to add your photo?";
+  document.getElementById("cameraChoiceRow").style.display = "flex";
+  document.getElementById("cameraCaptureRow").style.display = "none";
+  document.getElementById("cameraVideo").style.display = "none";
+}
+function stopCameraStream(){
+  if (cameraStream){
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+}
+function openPhotoModal(){
+  resetPhotoModal();
+  document.getElementById("cameraModal").classList.add("show");
+}
+function closePhotoModal(){
+  document.getElementById("cameraModal").classList.remove("show");
+  stopCameraStream();
+}
+
+document.getElementById("myPhotoBtn").addEventListener("click", () => {
+  tone(600, 0, 0.1, "triangle", 0.1);
+  openPhotoModal();
+});
+document.getElementById("closeCameraModalBtn").addEventListener("click", closePhotoModal);
+document.getElementById("cancelCameraBtn").addEventListener("click", closePhotoModal);
+document.getElementById("cameraModal").addEventListener("click", (e) => {
+  if (e.target.id === "cameraModal") closePhotoModal();
+});
+
+document.getElementById("chooseFileBtn").addEventListener("click", () => {
+  closePhotoModal();
+  document.getElementById("myPhotoInput").click();
+});
+
+document.getElementById("takeNewPhotoBtn").addEventListener("click", async () => {
+  const video = document.getElementById("cameraVideo");
+  const msg = document.getElementById("cameraMsg");
+  document.getElementById("cameraChoiceRow").style.display = "none";
+  msg.textContent = "Starting the camera...";
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    msg.textContent = "This browser can't use a camera. Try 'Choose Existing Photo' instead!";
+    document.getElementById("cameraChoiceRow").style.display = "flex";
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    video.srcObject = cameraStream;
+    video.style.display = "block";
+    msg.textContent = "Say cheese! 📷";
+    document.getElementById("cameraCaptureRow").style.display = "flex";
+  } catch (err) {
+    msg.textContent = "No camera found (or it was blocked). Try 'Choose Existing Photo' instead!";
+    document.getElementById("cameraChoiceRow").style.display = "flex";
+  }
+});
+
+document.getElementById("captureBtn").addEventListener("click", () => {
+  const video = document.getElementById("cameraVideo");
+  const size = 240;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext("2d");
+  const side = Math.min(video.videoWidth, video.videoHeight);
+  const sx = (video.videoWidth - side) / 2;
+  const sy = (video.videoHeight - side) / 2;
+  g.drawImage(video, sx, sy, side, side, 0, 0, size, size);
+  finishPhotoSave(canvas.toDataURL("image/jpeg", 0.85));
+  closePhotoModal();
+});
+
 renderMyPhotoPreview();
 
 // ---------- rides ----------
