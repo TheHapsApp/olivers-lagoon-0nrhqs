@@ -140,7 +140,12 @@
     <div class="my-photo-row">
       <button class="my-photo-btn" id="myPhotoBtn"><span id="myPhotoPreview">📸</span></button>
       <div class="my-photo-label">Tap for your photo!</div>
-      <input type="file" accept="image/*" id="myPhotoInput" style="display:none;">
+      <!-- No accept="image/*" filter — some real photo formats (like iPhone
+           HEIC photos) aren't always recognized by that filter on every
+           OS/browser, which can hide real photos from the picker entirely.
+           shrinkImageFile()'s onerror fallback below handles a non-image
+           file being picked by mistake with a friendly message instead. -->
+      <input type="file" id="myPhotoInput" style="display:none;">
     </div>
     <div class="beach-btn-row">
       <button class="beach-btn" id="goToBeachBtn">🏖️ Lagoon-A-Beach</button>
