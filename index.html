@@ -233,7 +233,7 @@ function phasesFor(ride){
   if (ride.category === "coaster"){
     return [
       { text:`🎢 Climbing up ${n}'s first hill...`, emo:"🎢", sounds:() => slideTone(220, 440, 0, 1.1) },
-      { text:"😱 Here we go... DROP!!", emo:"😱", shake:true, sounds:() => slideTone(700, 120, 0, 0.5) },
+      { text:"😱 WOOO HOOOO!!! Here we go, DROP!!", emo:"😱", shake:true, sounds:() => slideTone(700, 120, 0, 0.5) },
       { text:"🌀 Whoa, loop-de-loop!!", emo:"🌀", shake:true, sounds:() => { tone(500,0,0.12,"triangle",0.15); tone(650,0.12,0.12,"triangle",0.15); tone(500,0.24,0.12,"triangle",0.15); } },
       { text:"💨 Zooming through the turns!!", emo:"💨", shake:true, sounds:() => slideTone(300, 600, 0, 0.5) },
       { text:`🎉 You survived ${n}!! That was awesome!`, emo:"🎉", sounds:() => { tone(660,0,0.15,"sine",0.16); tone(880,0.12,0.2,"sine",0.16); } },
@@ -251,7 +251,7 @@ function phasesFor(ride){
     return [
       { text:`🪂 Rising up high on ${n}...`, emo:"🪂", sounds:() => slideTone(250, 500, 0, 1.0) },
       { text:"😲 Whoa, look how high up we are!", emo:"😲", sounds:() => tone(700, 0, 0.4, "sine", 0.12) },
-      { text:"🕊️ Free fall... WHEEE!!", emo:"🕊️", shake:true, sounds:() => slideTone(650, 150, 0, 0.6) },
+      { text:"🕊️ WOOO HOOOO!!! Free fall!!", emo:"🕊️", shake:true, sounds:() => slideTone(650, 150, 0, 0.6) },
       { text:`🎉 What a rush on ${n}!!`, emo:"🎉", sounds:() => { tone(660,0,0.15,"sine",0.16); tone(880,0.12,0.2,"sine",0.16); } },
     ];
   }
