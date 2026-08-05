@@ -226,7 +226,34 @@ function slideTone(fromFreq, toFreq, start, dur, gainMax){
 // ---------- my photo (stored locally on this device only) ----------
 const PHOTO_KEY = "lagoon_my_photo";
 function loadMyPhoto(){ try { return localStorage.getItem(PHOTO_KEY); } catch (e){ return null; } }
-function saveMyPhoto(dataUrl){ try { localStorage.setItem(PHOTO_KEY, dataUrl); } catch (e){} }
+// No try/catch here — a save failure needs to reach the caller so it can
+// tell Oliver, not disappear silently (see the bug this fixed, below).
+function saveMyPhoto(dataUrl){ localStorage.setItem(PHOTO_KEY, dataUrl); }
+
+// A real camera photo is several MB — as a base64 data URL that's often
+// 5MB+, which blows past localStorage's ~5MB-per-site quota and used to
+// fail completely silently (saveMyPhoto swallowed the error, so tapping
+// the button to take a photo just... did nothing, with no clue why).
+// Shrinking to a small square JPEG first keeps it to a few KB regardless
+// of camera resolution, so it always fits.
+function shrinkImageFile(file, maxSize, callback){
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = maxSize;
+    canvas.height = maxSize;
+    const g = canvas.getContext("2d");
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const sx = (img.naturalWidth - side) / 2;
+    const sy = (img.naturalHeight - side) / 2;
+    g.drawImage(img, sx, sy, side, side, 0, 0, maxSize, maxSize);
+    URL.revokeObjectURL(url);
+    callback(canvas.toDataURL("image/jpeg", 0.8));
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); callback(null); };
+  img.src = url;
+}
 
 function renderMyPhotoPreview(){
   const el = document.getElementById("myPhotoPreview");
@@ -239,15 +266,23 @@ document.getElementById("myPhotoBtn").addEventListener("click", () => {
 });
 document.getElementById("myPhotoInput").addEventListener("change", (e) => {
   const file = e.target.files[0];
+  e.target.value = ""; // so picking the same file again later still fires "change"
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    saveMyPhoto(reader.result);
+  shrinkImageFile(file, 240, (dataUrl) => {
+    if (!dataUrl){
+      alert("Hmm, that photo didn't work — try picking a different one!");
+      return;
+    }
+    try {
+      saveMyPhoto(dataUrl);
+    } catch (err) {
+      alert("That photo couldn't be saved — try again!");
+      return;
+    }
     renderMyPhotoPreview();
     tone(700, 0, 0.1, "sine", 0.12);
     tone(900, 0.1, 0.15, "sine", 0.12);
-  };
-  reader.readAsDataURL(file);
+  });
 });
 renderMyPhotoPreview();
 
