@@ -31,40 +31,72 @@
     animation:pop 2.5s ease-in-out infinite;
   }
   @keyframes pop{0%,100%{transform:scale(1) rotate(-1deg);}50%{transform:scale(1.04) rotate(1deg);}}
-  .sub{font-size:clamp(0.95rem,3.5vw,1.15rem); margin:4px 0 24px; text-shadow:1px 1px 0 rgba(0,0,0,0.15);}
+  .sub{font-size:clamp(0.95rem,3.5vw,1.15rem); margin:4px 0 16px; text-shadow:1px 1px 0 rgba(0,0,0,0.15);}
 
   .screen{display:none;}
   .screen.active{display:block;}
 
-  /* ---- ride grid ---- */
-  .ride-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:16px; max-width:420px; margin:0 auto;}
-  .ride-tile{
-    display:flex; flex-direction:column; align-items:center; gap:6px; background:rgba(255,255,255,0.18);
-    border:3px solid #fff; border-radius:20px; padding:14px 8px; cursor:pointer; font-family:inherit;
-    box-shadow:0 5px 0 rgba(0,0,0,0.2); transition:transform .08s ease;
+  /* ---- my photo picker ---- */
+  .my-photo-row{display:flex; flex-direction:column; align-items:center; gap:4px; margin-bottom:16px;}
+  .my-photo-btn{
+    width:64px; height:64px; border-radius:50%; border:4px solid #fff; background:rgba(255,255,255,0.25);
+    cursor:pointer; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:1.8rem;
+    box-shadow:0 4px 0 rgba(0,0,0,0.2);
   }
-  .ride-tile:active{transform:translateY(4px); box-shadow:0 1px 0 rgba(0,0,0,0.2);}
-  .ride-icon{
-    width:64px; height:64px; border-radius:18px; display:flex; align-items:center; justify-content:center;
-    font-size:2rem; box-shadow:0 4px 0 rgba(0,0,0,0.25) inset;
+  .my-photo-btn:active{transform:translateY(2px); box-shadow:0 1px 0 rgba(0,0,0,0.2);}
+  .my-photo-btn img{width:100%; height:100%; object-fit:cover;}
+  .my-photo-label{font-size:0.68rem; opacity:0.9; text-shadow:1px 1px 0 rgba(0,0,0,0.15);}
+
+  /* ---- park map ---- */
+  .park-map{
+    position:relative; max-width:460px; aspect-ratio:1/1; margin:0 auto;
+    background:linear-gradient(160deg,#9be89b,#6fcf6f);
+    border:5px solid #fff; border-radius:28px; overflow:hidden;
+    box-shadow:0 8px 0 rgba(0,0,0,0.2);
   }
-  .ride-name{font-size:0.85rem; font-weight:bold; text-shadow:1px 1px 0 rgba(0,0,0,0.15); line-height:1.2;}
-  .ride-cat{font-size:0.65rem; opacity:0.85; text-transform:uppercase; letter-spacing:0.03em;}
+  .lagoon-water{
+    position:absolute; left:50%; top:53%; width:46%; height:34%; transform:translate(-50%,-50%);
+    background:radial-gradient(circle at 35% 30%, #7fd8f5, #1d8fc9);
+    border-radius:50% 45% 55% 50% / 55% 50% 50% 45%;
+    box-shadow:inset 0 0 14px rgba(0,0,0,0.2);
+  }
+  .park-tree{position:absolute; font-size:1.5rem; filter:drop-shadow(0 2px 1px rgba(0,0,0,0.2));}
+  .ride-pin{
+    position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:2px;
+    background:none; border:none; cursor:pointer; padding:0;
+  }
+  .ride-pin:active{transform:translate(-50%,-50%) scale(0.9);}
+  .ride-pin-icon{
+    width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    font-size:1.5rem; box-shadow:0 3px 0 rgba(0,0,0,0.3); border:2px solid #fff;
+  }
+  .ride-pin-label{
+    font-size:0.44rem; font-weight:bold; color:#1f2937; background:rgba(255,255,255,0.92); border-radius:6px;
+    padding:1px 4px; white-space:nowrap; line-height:1.3; max-width:70px; overflow:hidden; text-overflow:ellipsis;
+  }
 
   /* ---- on-ride view ---- */
   .ride-view{
     max-width:420px; margin:10px auto 0; background:rgba(0,0,0,0.28); border:4px solid #fff; border-radius:28px;
-    padding:34px 20px; min-height:280px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+    padding:34px 20px; min-height:300px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
   }
-  .ride-view.shaking{animation:rideShake 0.35s ease-in-out infinite;}
+  .ride-view.shaking .ride-scene{animation:rideShake 0.35s ease-in-out infinite;}
   @keyframes rideShake{
     0%,100%{transform:translate(0,0) rotate(0deg);}
-    25%{transform:translate(-4px,2px) rotate(-1deg);}
-    50%{transform:translate(3px,-3px) rotate(1deg);}
-    75%{transform:translate(-2px,-2px) rotate(-1deg);}
+    25%{transform:translate(-5px,3px) rotate(-3deg);}
+    50%{transform:translate(4px,-4px) rotate(3deg);}
+    75%{transform:translate(-3px,-3px) rotate(-2deg);}
   }
-  .ride-big-emo{font-size:4.5rem; filter:drop-shadow(0 6px 0 rgba(0,0,0,0.25)); transition:transform 0.25s ease;}
-  .ride-phase-text{font-size:1.15rem; font-weight:bold; text-shadow:2px 2px 0 rgba(0,0,0,0.2); min-height:2.6em; display:flex; align-items:center; justify-content:center;}
+  .ride-scene{display:flex; flex-direction:column; align-items:center;}
+  .ride-cart{
+    width:96px; height:96px; border-radius:50%; background:#fff; border:6px solid #ffcf4d;
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    box-shadow:0 6px 0 rgba(0,0,0,0.3);
+  }
+  .ride-cart img{width:100%; height:100%; object-fit:cover;}
+  .ride-cart-placeholder{font-size:2.6rem;}
+  .ride-emo-badge{font-size:1.9rem; margin-top:-16px; filter:drop-shadow(0 3px 0 rgba(0,0,0,0.3));}
+  .ride-phase-text{font-size:1.1rem; font-weight:bold; text-shadow:2px 2px 0 rgba(0,0,0,0.2); min-height:2.6em; display:flex; align-items:center; justify-content:center;}
   .ride-view-name{font-size:1rem; opacity:0.85; margin-top:-8px;}
   .ride-done-row{display:flex; gap:12px; flex-wrap:wrap; justify-content:center;}
   .ride-btn{
@@ -80,18 +112,33 @@
 </head>
 <body>
   <h1>🌴 Oliver's Lagoon</h1>
-  <p class="sub">Tap a ride to go on it!</p>
+  <p class="sub">Tap a ride on the map to go on it!</p>
 
-  <!-- ==== RIDE GRID ==== -->
+  <!-- ==== PARK MAP ==== -->
   <div class="screen active" id="screen-park">
-    <div class="ride-grid" id="rideGrid"></div>
+    <div class="my-photo-row">
+      <button class="my-photo-btn" id="myPhotoBtn"><span id="myPhotoPreview">📸</span></button>
+      <div class="my-photo-label">Tap for your photo!</div>
+      <input type="file" accept="image/*" capture="user" id="myPhotoInput" style="display:none;">
+    </div>
+    <div class="park-map" id="parkMap">
+      <div class="lagoon-water"></div>
+      <span class="park-tree" style="left:4%; top:5%;">🌴</span>
+      <span class="park-tree" style="left:95%; top:5%;">🌴</span>
+      <span class="park-tree" style="left:4%; top:95%;">🌴</span>
+      <span class="park-tree" style="left:95%; top:95%;">🌴</span>
+      <div id="ridePinsLayer"></div>
+    </div>
   </div>
 
   <!-- ==== ON-RIDE VIEW ==== -->
   <div class="screen" id="screen-ride">
     <div class="ride-view" id="rideView">
       <div class="ride-view-name" id="rideViewName">Ride Name</div>
-      <div class="ride-big-emo" id="rideBigEmo">🎢</div>
+      <div class="ride-scene">
+        <div class="ride-cart" id="rideCart"><span class="ride-cart-placeholder" id="rideCartPlaceholder">🙂</span></div>
+        <div class="ride-emo-badge" id="rideBigEmo">🎢</div>
+      </div>
       <div class="ride-phase-text" id="ridePhaseText">Getting ready...</div>
       <div class="ride-done-row" id="rideDoneRow" style="display:none;">
         <button class="ride-btn again" id="rideAgainBtn">🔁 Ride Again</button>
@@ -137,18 +184,46 @@ function slideTone(fromFreq, toFreq, start, dur, gainMax){
   osc.stop(c.currentTime + start + dur + 0.05);
 }
 
+// ---------- my photo (stored locally on this device only) ----------
+const PHOTO_KEY = "lagoon_my_photo";
+function loadMyPhoto(){ try { return localStorage.getItem(PHOTO_KEY); } catch (e){ return null; } }
+function saveMyPhoto(dataUrl){ try { localStorage.setItem(PHOTO_KEY, dataUrl); } catch (e){} }
+
+function renderMyPhotoPreview(){
+  const el = document.getElementById("myPhotoPreview");
+  const photo = loadMyPhoto();
+  el.innerHTML = photo ? `<img src="${photo}" alt="Me">` : "📸";
+}
+document.getElementById("myPhotoBtn").addEventListener("click", () => {
+  tone(600, 0, 0.1, "triangle", 0.1);
+  document.getElementById("myPhotoInput").click();
+});
+document.getElementById("myPhotoInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    saveMyPhoto(reader.result);
+    renderMyPhotoPreview();
+    tone(700, 0, 0.1, "sine", 0.12);
+    tone(900, 0.1, 0.15, "sine", 0.12);
+  };
+  reader.readAsDataURL(file);
+});
+renderMyPhotoPreview();
+
 // ---------- rides ----------
 const RIDES = [
-  { id:"colossus",    name:"Colossus the Fire Dragon", emo:"🐉", color:"#ff5722", category:"coaster" },
-  { id:"wicked",       name:"Wicked",                    emo:"😈", color:"#7c3aed", category:"coaster" },
-  { id:"cannibal",     name:"Cannibal",                   emo:"💀", color:"#b91c1c", category:"coaster" },
-  { id:"bombora",      name:"Bombora",                     emo:"🌊", color:"#0369a1", category:"coaster" },
-  { id:"rattlesnake",  name:"Rattlesnake Rapids",           emo:"🐍", color:"#16a34a", category:"water" },
-  { id:"tidalwave",    name:"Tidal Wave",                    emo:"💦", color:"#0284c7", category:"water" },
-  { id:"skycoaster",   name:"SkyCoaster",                     emo:"🪂", color:"#38bdf8", category:"sky" },
-  { id:"wildkingdom",  name:"Wild Kingdom",                    emo:"🦁", color:"#65a30d", category:"mild" },
-  { id:"puff",         name:"Puff the Little Fire Dragon",      emo:"🐲", color:"#fbbf24", category:"mild" },
-  { id:"ferriswheel",  name:"Ferris Wheel",                      emo:"🎡", color:"#ec4899", category:"mild" },
+  { id:"colossus",    name:"Colossus the Fire Dragon", emo:"🐉", color:"#ff5722", category:"coaster", left:"18%", top:"14%" },
+  { id:"wicked",       name:"Wicked",                    emo:"😈", color:"#7c3aed", category:"coaster", left:"50%", top:"8%"  },
+  { id:"cannibal",     name:"Cannibal",                   emo:"💀", color:"#b91c1c", category:"coaster", left:"82%", top:"14%" },
+  { id:"bombora",      name:"Bombora",                     emo:"🌊", color:"#0369a1", category:"coaster", left:"88%", top:"45%" },
+  { id:"rattlesnake",  name:"Rattlesnake Rapids",           emo:"🐍", color:"#16a34a", category:"water",   left:"82%", top:"80%" },
+  { id:"tidalwave",    name:"Tidal Wave",                    emo:"💦", color:"#0284c7", category:"water",   left:"50%", top:"92%" },
+  { id:"skycoaster",   name:"SkyCoaster",                     emo:"🪂", color:"#38bdf8", category:"sky",     left:"18%", top:"80%" },
+  { id:"wildkingdom",  name:"Wild Kingdom",                    emo:"🦁", color:"#65a30d", category:"mild",    left:"12%", top:"45%" },
+  { id:"puff",         name:"Puff the Little Fire Dragon",      emo:"🐲", color:"#fbbf24", category:"mild",    left:"33%", top:"30%" },
+  { id:"ferriswheel",  name:"Ferris Wheel",                      emo:"🎡", color:"#ec4899", category:"mild",    left:"67%", top:"30%" },
 ];
 const CATEGORY_LABEL = { coaster:"Roller Coaster", water:"Water Ride", sky:"Sky Ride", mild:"Family Ride" };
 
@@ -188,17 +263,18 @@ function phasesFor(ride){
   ];
 }
 
-function renderRideGrid(){
-  const grid = document.getElementById("rideGrid");
-  grid.innerHTML = "";
+function renderRideMap(){
+  const layer = document.getElementById("ridePinsLayer");
+  layer.innerHTML = "";
   RIDES.forEach(ride => {
-    const btn = document.createElement("button");
-    btn.className = "ride-tile";
-    btn.innerHTML = `<div class="ride-icon" style="background:${ride.color}">${ride.emo}</div>
-      <div class="ride-name">${ride.name}</div>
-      <div class="ride-cat">${CATEGORY_LABEL[ride.category]}</div>`;
-    btn.addEventListener("click", () => startRide(ride));
-    grid.appendChild(btn);
+    const pin = document.createElement("button");
+    pin.className = "ride-pin";
+    pin.style.left = ride.left;
+    pin.style.top = ride.top;
+    pin.innerHTML = `<div class="ride-pin-icon" style="background:${ride.color}">${ride.emo}</div>
+      <div class="ride-pin-label">${ride.name}</div>`;
+    pin.addEventListener("click", () => startRide(ride));
+    layer.appendChild(pin);
   });
 }
 
@@ -210,18 +286,29 @@ function showScreen(id){
 let rideTimeout = null;
 let currentRide = null;
 
+// Shows Oliver's own photo (if he's set one) riding along on the cart —
+// set once per ride start, doesn't change phase to phase since it's just him.
+function renderRideCart(){
+  const cart = document.getElementById("rideCart");
+  const photo = loadMyPhoto();
+  cart.innerHTML = photo
+    ? `<img src="${photo}" alt="Me">`
+    : `<span class="ride-cart-placeholder" id="rideCartPlaceholder">🙂</span>`;
+}
+
 function startRide(ride){
   currentRide = ride;
   showScreen("ride");
   document.getElementById("rideViewName").textContent = ride.name;
   document.getElementById("rideDoneRow").style.display = "none";
+  renderRideCart();
   playPhases(ride);
 }
 
 function playPhases(ride){
   const phases = phasesFor(ride);
   const view = document.getElementById("rideView");
-  const emoEl = document.getElementById("rideBigEmo");
+  const badgeEl = document.getElementById("rideBigEmo");
   const textEl = document.getElementById("ridePhaseText");
   view.classList.remove("shaking");
   clearTimeout(rideTimeout);
@@ -230,7 +317,7 @@ function playPhases(ride){
   function step(){
     if (currentRide !== ride) return; // navigated away mid-sequence
     const phase = phases[i];
-    emoEl.textContent = phase.emo || ride.emo;
+    badgeEl.textContent = phase.emo || ride.emo;
     textEl.textContent = phase.text;
     view.classList.toggle("shaking", !!phase.shake);
     if (phase.sounds) phase.sounds();
@@ -260,7 +347,7 @@ document.getElementById("rideBackBtn").addEventListener("click", () => {
   showScreen("park");
 });
 
-renderRideGrid();
+renderRideMap();
 </script>
 </body>
 </html>
