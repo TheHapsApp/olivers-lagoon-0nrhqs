@@ -108,7 +108,14 @@
     position:relative; width:100%; max-width:380px; border-radius:18px; overflow:hidden;
     border:4px solid #fff; box-shadow:0 6px 0 rgba(0,0,0,0.3); line-height:0;
   }
-  #rideCanvas{width:100%; height:auto; display:block;}
+  #rideCanvas{width:100%; height:auto; display:block; position:relative; z-index:1;}
+  .ride-photo-bg{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none;
+  }
+  .ride-photo-bg.show{display:block;}
+  .photo-credit{
+    font-size:0.62rem; opacity:0.75; margin-top:4px; text-shadow:1px 1px 0 rgba(0,0,0,0.15); min-height:1em;
+  }
   .ride-emo-badge{
     position:absolute; top:6px; left:8px; font-size:1.6rem; margin-top:0;
     filter:drop-shadow(0 3px 0 rgba(0,0,0,0.4)); transition:transform 0.15s ease;
@@ -197,9 +204,11 @@
       <div class="ride-view-name" id="rideViewName">Ride Name</div>
       <div class="ride-scene">
         <div class="ride-canvas-wrap">
+          <img class="ride-photo-bg" id="ridePhotoBg" alt="">
           <canvas id="rideCanvas" width="380" height="190"></canvas>
           <div class="ride-emo-badge" id="rideBigEmo">🎢</div>
         </div>
+        <div class="photo-credit" id="photoCredit"></div>
       </div>
       <div class="ride-phase-text" id="ridePhaseText">Getting ready...</div>
       <div class="ride-done-row" id="rideDoneRow" style="display:none;">
@@ -551,6 +560,21 @@ function drawVehicleWithRiders(ctx, x, y, angle, cabinColor){
 }
 
 // ---- track engine: coasters, flumes, splash rides, spinning rafts ----
+// For rides with a real photo backdrop: skip the drawn sky/ground/track
+// entirely (the real photo already shows the real thing) and just animate
+// the cart + riders in a simple climb-and-crest arc over the image — no
+// attempt to pixel-align with the photo's own geometry, just motion.
+function drawPhotoRideOverlay(ctx, ride, elapsedSec){
+  ctx.clearRect(0, 0, RIDE_CANVAS_W, RIDE_CANVAS_H);
+  const duration = 6;
+  const t = (elapsedSec % duration) / duration;
+  const x = 40 + t * (RIDE_CANVAS_W - 80);
+  const y = RIDE_CANVAS_H - 40 - Math.sin(t * Math.PI) * (RIDE_CANVAS_H - 90);
+  const angle = Math.cos(t * Math.PI) * 0.6;
+  const theme = RIDE_THEMES[ride.theme] || RIDE_THEMES.coaster;
+  drawVehicleWithRiders(ctx, x, y, angle, theme.cabin);
+}
+
 function drawTrackRide(ctx, ride, elapsedSec){
   const theme = RIDE_THEMES[ride.theme] || RIDE_THEMES.coaster;
   const totalDur = ride._timeline[ride._timeline.length - 1];
@@ -733,12 +757,26 @@ function initRideVisual(ride){
   if (ride.engine === "track" && !ride._timeline) ride._timeline = buildRideTimeline(ride.heights);
   currentNpcRiders = pickNpcRiders();
   loadPlayerPhotoImage();
+
+  const photoEl = document.getElementById("ridePhotoBg");
+  const creditEl = document.getElementById("photoCredit");
+  if (ride.photoUrl){
+    photoEl.src = ride.photoUrl;
+    photoEl.classList.add("show");
+    creditEl.textContent = ride.photoCredit || "";
+  } else {
+    photoEl.classList.remove("show");
+    photoEl.removeAttribute("src");
+    creditEl.textContent = "";
+  }
+
   rideVisualStartPerf = performance.now();
   if (rideVisualAnimId) cancelAnimationFrame(rideVisualAnimId);
   rideVisualAnimId = requestAnimationFrame(function frame(){
     if (currentRide !== ride) return; // navigated away
     const elapsedSec = (performance.now() - rideVisualStartPerf) / 1000;
-    if (ride.engine === "wheel") drawWheelRide(rideCanvasCtx, ride, elapsedSec);
+    if (ride.photoUrl) drawPhotoRideOverlay(rideCanvasCtx, ride, elapsedSec);
+    else if (ride.engine === "wheel") drawWheelRide(rideCanvasCtx, ride, elapsedSec);
     else if (ride.engine === "swing") drawSwingRide(rideCanvasCtx, ride, elapsedSec);
     else if (ride.engine === "drive") drawDriveRide(rideCanvasCtx, ride, elapsedSec);
     else drawTrackRide(rideCanvasCtx, ride, elapsedSec);
@@ -757,18 +795,22 @@ var RIDES = [ // var (not const) so jsdom tests can reach it via window.RIDES
   // tunnel-launch, Colossus's long wooden-coaster profile).
   { id:"colossus",   name:"Colossus the Fire Dragon", emo:"🐉", color:"#ff5722", category:"coaster", left:"18%", top:"14%",
     engine:"track", theme:"coaster", loops:noLoops(32),
-    heights:[2,4,8,14,18,20,19,8,16,6,14,5,12,5,10,5,9,4,8,4,7,4,6,3,5,3,4,3,3,2,2,2] },
+    heights:[2,4,8,14,18,20,19,8,16,6,14,5,12,5,10,5,9,4,8,4,7,4,6,3,5,3,4,3,3,2,2,2],
+    photoUrl:"ride-photos/colossus.jpg", photoCredit:"Real photo: Ben P L, CC BY-SA 2.0 (Wikimedia Commons)" },
   { id:"wicked",     name:"Wicked", emo:"😈", color:"#7c3aed", category:"coaster", left:"50%", top:"8%",
     engine:"track", theme:"coaster", loops:noLoops(24), tunnelCols:4,
-    heights:[2,2,2,3,20,19,6,14,5,16,4,11,6,9,4,7,3,5,3,4,2,3,2,2] },
+    heights:[2,2,2,3,20,19,6,14,5,16,4,11,6,9,4,7,3,5,3,4,2,3,2,2],
+    photoUrl:"ride-photos/wicked.jpg", photoCredit:"Real photo: Davehi1, Public Domain (Wikimedia Commons)" },
   { id:"cannibal",   name:"Cannibal", emo:"💀", color:"#b91c1c", category:"coaster", left:"82%", top:"14%",
     engine:"track", theme:"coaster", loops:loopsAt([7,10,17,20],30),
-    heights:[2,2,20,20,2,5,13,13,4,12,12,5,8,8,6,6,9,9,4,8,8,4,5,3,4,3,3,2,2,2] },
+    heights:[2,2,20,20,2,5,13,13,4,12,12,5,8,8,6,6,9,9,4,8,8,4,5,3,4,3,3,2,2,2],
+    photoUrl:"ride-photos/cannibal.jpg", photoCredit:"Real photo: Ben P L, CC BY-SA 2.0 (Wikimedia Commons)" },
   // BomBora: real family steel coaster, 45ft tall, 1040ft, 31mph — gentle
   // rolling hills and turns, no inversions.
   { id:"bombora",    name:"Bombora", emo:"🌊", color:"#0369a1", category:"coaster", left:"88%", top:"45%",
     engine:"track", theme:"coaster", loops:noLoops(24),
-    heights:[2,3,5,7,8,6,4,6,8,9,7,5,4,6,7,8,6,4,3,4,5,4,3,2] },
+    heights:[2,3,5,7,8,6,4,6,8,9,7,5,4,6,7,8,6,4,3,4,5,4,3,2],
+    photoUrl:"ride-photos/bombora.jpg", photoCredit:"Real photo: Tom the Bergeron, CC BY 3.0 (Wikimedia Commons)" },
   // Rattlesnake Rapids: a real spinning raft ride — the raft rotates freely
   // as it drifts through rising swells and whitewater (pioneer-mine theme).
   { id:"rattlesnake", name:"Rattlesnake Rapids", emo:"🐍", color:"#16a34a", category:"water", left:"82%", top:"80%",
@@ -780,7 +822,8 @@ var RIDES = [ // var (not const) so jsdom tests can reach it via window.RIDES
     heights:[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,20,3,3,4,4] },
   // SkyCoaster: winched ~150ft up, released, swings like a giant pendulum.
   { id:"skycoaster", name:"SkyCoaster", emo:"🪂", color:"#38bdf8", category:"sky", left:"18%", top:"80%",
-    engine:"swing" },
+    engine:"swing",
+    photoUrl:"ride-photos/skycoaster.jpg", photoCredit:"Real photo: Ben P L, CC BY-SA 2.0 (Wikimedia Commons)" },
   // Wild Kingdom: the real ride is a train that loops around a lagoon,
   // through a tunnel, past animal exhibits, and back to the station.
   { id:"wildkingdom", name:"Wild Kingdom", emo:"🦁", color:"#65a30d", category:"mild", left:"12%", top:"45%",
