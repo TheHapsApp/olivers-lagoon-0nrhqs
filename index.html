@@ -104,14 +104,15 @@
     75%{transform:translate(-3px,-3px) rotate(-2deg);}
   }
   .ride-scene{display:flex; flex-direction:column; align-items:center;}
-  .ride-cart{
-    width:96px; height:96px; border-radius:50%; background:#fff; border:6px solid #ffcf4d;
-    display:flex; align-items:center; justify-content:center; overflow:hidden;
-    box-shadow:0 6px 0 rgba(0,0,0,0.3);
+  .ride-canvas-wrap{
+    position:relative; width:100%; max-width:380px; border-radius:18px; overflow:hidden;
+    border:4px solid #fff; box-shadow:0 6px 0 rgba(0,0,0,0.3); line-height:0;
   }
-  .ride-cart img{width:100%; height:100%; object-fit:cover;}
-  .ride-cart-placeholder{font-size:2.6rem;}
-  .ride-emo-badge{font-size:1.9rem; margin-top:-16px; filter:drop-shadow(0 3px 0 rgba(0,0,0,0.3)); transition:transform 0.15s ease;}
+  #rideCanvas{width:100%; height:auto; display:block;}
+  .ride-emo-badge{
+    position:absolute; top:6px; left:8px; font-size:1.6rem; margin-top:0;
+    filter:drop-shadow(0 3px 0 rgba(0,0,0,0.4)); transition:transform 0.15s ease;
+  }
   .ride-emo-badge.screaming{animation:emoScream 0.22s ease-in-out infinite;}
   @keyframes emoScream{
     0%,100%{transform:scale(1.3) rotate(-4deg);}
@@ -195,8 +196,10 @@
     <div class="ride-view" id="rideView">
       <div class="ride-view-name" id="rideViewName">Ride Name</div>
       <div class="ride-scene">
-        <div class="ride-cart" id="rideCart"><span class="ride-cart-placeholder" id="rideCartPlaceholder">🙂</span></div>
-        <div class="ride-emo-badge" id="rideBigEmo">🎢</div>
+        <div class="ride-canvas-wrap">
+          <canvas id="rideCanvas" width="380" height="190"></canvas>
+          <div class="ride-emo-badge" id="rideBigEmo">🎢</div>
+        </div>
       </div>
       <div class="ride-phase-text" id="ridePhaseText">Getting ready...</div>
       <div class="ride-done-row" id="rideDoneRow" style="display:none;">
@@ -401,28 +404,411 @@ document.getElementById("captureBtn").addEventListener("click", () => {
 
 renderMyPhotoPreview();
 
+// =====================================================================
+// ---------- ride-through visual engine ----------
+// Real animated rides instead of a static photo badge: each ride has an
+// `engine` ("track"/"wheel"/"swing"/"drive") that drives its own canvas
+// animation, built to evoke the real Lagoon attraction's actual shape —
+// Colossus/Wicked/Cannibal reuse the exact researched track data from the
+// Coaster Party app (same RCDB-grounded Cannibal element sequence, Wicked's
+// tunnel-launch, Colossus's long wooden-coaster profile); the rest are
+// shaped from real facts (BomBora's gentle 45ft rolling hills, Rattlesnake
+// Rapids' spinning raft, Tidal Wave's ~70ft plunge, SkyCoaster's winch-then-
+// pendulum-swing, Wild Kingdom's actual train-past-animals loop) — not a
+// literal survey trace, just a genuine best effort at the real feel within
+// a simple canvas.
+// =====================================================================
+
+function noLoops(len){ return new Array(len).fill(false); }
+function loopsAt(idxs, len){ var a = noLoops(len); idxs.forEach(function (i) { a[i] = true; }); return a; }
+
+const RIDE_CANVAS_W = 380, RIDE_CANVAS_H = 190;
+const TRACK_STEP = 15, TRACK_UNIT_H = 6.2, TRACK_GROUND_Y = 150, TRACK_LOOP_RADIUS = 15;
+const RIDE_BASE_SPEED = 3.2, RIDE_SLOPE_FACTOR = 1.4, RIDE_MIN_SPEED = 1.2, RIDE_MAX_SPEED = 6.5;
+
+function clampNum(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
+
+// Deterministic timeline from a heights array — downhill is fast, uphill is
+// slow, same speed model as Coaster Party (not that sync matters here with
+// no multiplayer, but it's a proven, good-feeling pacing curve).
+function buildRideTimeline(heights){
+  const times = [0];
+  for (let i = 1; i < heights.length; i++){
+    const slope = heights[i] - heights[i - 1];
+    const speed = clampNum(RIDE_BASE_SPEED - slope * RIDE_SLOPE_FACTOR, RIDE_MIN_SPEED, RIDE_MAX_SPEED);
+    times.push(times[i - 1] + 1 / speed);
+  }
+  return times;
+}
+function getRideProgress(timeline, elapsedSec){
+  const n = timeline.length;
+  if (elapsedSec >= timeline[n - 1]) return { done:true, col:n - 1, nextCol:n - 1, frac:1 };
+  let i = 0;
+  while (i < n - 2 && timeline[i + 1] <= elapsedSec) i++;
+  const segStart = timeline[i], segEnd = timeline[i + 1];
+  const frac = segEnd > segStart ? (elapsedSec - segStart) / (segEnd - segStart) : 0;
+  return { done:false, col:i, nextCol:i + 1, frac:frac };
+}
+
+function trackWorldX(col){ return col * TRACK_STEP; }
+function trackWorldY(h){ return TRACK_GROUND_Y - h * TRACK_UNIT_H; }
+// Loops are a pure rendering override on top of the normal linear position —
+// if the linear x falls within a loop column's radius, trace a circle
+// instead, driven by that same linear x (so timing is completely unaffected).
+function applyTrackLoopOverride(x, y, heights, loops){
+  if (!loops) return { x:x, y:y, angle:0 };
+  for (let li = 0; li < loops.length; li++){
+    if (!loops[li] || heights[li] == null) continue;
+    const centerX = trackWorldX(li);
+    if (Math.abs(x - centerX) > TRACK_LOOP_RADIUS) continue;
+    const centerY = trackWorldY(heights[li]) - TRACK_LOOP_RADIUS;
+    const phase = clampNum((x - (centerX - TRACK_LOOP_RADIUS)) / (2 * TRACK_LOOP_RADIUS), 0, 1);
+    const theta = phase * Math.PI * 2;
+    return { x:centerX + Math.sin(theta) * TRACK_LOOP_RADIUS, y:centerY + Math.cos(theta) * TRACK_LOOP_RADIUS, angle:theta };
+  }
+  return { x:x, y:y, angle:0 };
+}
+
+const RIDE_THEMES = {
+  coaster: { skyTop:"#3fa9d9", skyBottom:"#bfe8ff", ground:"#7fb955", track:"#8a5a3a", cabin:"#ff5722" },
+  water:   { skyTop:"#4fb8d9", skyBottom:"#cdeffa", ground:"#1d8fc9", track:"#0369a1", cabin:"#0ea5e9" },
+  splash:  { skyTop:"#3fa0d9", skyBottom:"#bfe8ff", ground:"#1d8fc9", track:"#0284c7", cabin:"#0284c7" },
+};
+
+// ---- the riders: the kid's own photo (if set) plus a couple of computer
+// people along for the ride, so the cart never feels empty. Picked fresh
+// each time a ride starts (not re-randomized every frame). ----
+const NPC_RIDER_COLORS = ["#ff6b6b", "#4dd0e1", "#ffd54f", "#a78bfa", "#f472b6"];
+const NPC_RIDER_FACES = ["😄", "😆", "🙃", "😎", "🤩", "😁"];
+function pickNpcRiders(){
+  const count = 2 + Math.floor(Math.random() * 2); // 2 or 3 computer riders
+  const riders = [];
+  for (let i = 0; i < count; i++){
+    riders.push({
+      color: NPC_RIDER_COLORS[Math.floor(Math.random() * NPC_RIDER_COLORS.length)],
+      face: NPC_RIDER_FACES[Math.floor(Math.random() * NPC_RIDER_FACES.length)],
+    });
+  }
+  return riders;
+}
+var currentNpcRiders = []; // var (not let) so jsdom tests can reach it via window.currentNpcRiders
+let currentPlayerPhotoImg = null;
+function loadPlayerPhotoImage(){
+  currentPlayerPhotoImg = null;
+  const dataUrl = loadMyPhoto();
+  if (!dataUrl) return;
+  const img = new Image();
+  img.onload = () => { currentPlayerPhotoImg = img; };
+  img.src = dataUrl;
+}
+
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawRiderSeat(ctx, x, y, npc){
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.arc(0, 0, 7, 0, Math.PI * 2);
+  if (!npc && currentPlayerPhotoImg){
+    ctx.save();
+    ctx.clip();
+    ctx.drawImage(currentPlayerPhotoImg, -7, -7, 14, 14);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = npc ? npc.color : "#fff";
+    ctx.fill();
+    ctx.font = "9px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(npc ? npc.face : "🙂", 0, 1);
+  }
+  ctx.restore();
+}
+// The cart/raft/gondola/jeep itself — a small rounded cabin holding the
+// player + every NPC rider in a row, so "you" are always visibly one of
+// several people riding together, not alone.
+function drawVehicleWithRiders(ctx, x, y, angle, cabinColor){
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate((angle || 0) * 0.25);
+  const seatCount = 1 + currentNpcRiders.length;
+  const w = 15 * seatCount + 10;
+  ctx.fillStyle = cabinColor || "#ffcf4d";
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  roundRectPath(ctx, -w / 2, -5, w, 22, 7);
+  ctx.fill(); ctx.stroke();
+  const startX = -((seatCount - 1) * 16) / 2;
+  drawRiderSeat(ctx, startX, 6, null);
+  currentNpcRiders.forEach((r, i) => drawRiderSeat(ctx, startX + (i + 1) * 16, 6, r));
+  ctx.restore();
+}
+
+// ---- track engine: coasters, flumes, splash rides, spinning rafts ----
+function drawTrackRide(ctx, ride, elapsedSec){
+  const theme = RIDE_THEMES[ride.theme] || RIDE_THEMES.coaster;
+  const totalDur = ride._timeline[ride._timeline.length - 1];
+  const t = totalDur > 0 ? elapsedSec % totalDur : 0;
+  const prog = getRideProgress(ride._timeline, t);
+  const heights = ride.heights, loops = ride.loops || noLoops(heights.length);
+
+  const inTunnel = ride.tunnelCols > 0 && prog.col < ride.tunnelCols;
+  if (inTunnel){
+    ctx.fillStyle = "#0c0c16";
+    ctx.fillRect(0, 0, RIDE_CANVAS_W, RIDE_CANVAS_H);
+  } else {
+    const grad = ctx.createLinearGradient(0, 0, 0, RIDE_CANVAS_H);
+    grad.addColorStop(0, theme.skyTop); grad.addColorStop(1, theme.skyBottom);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, RIDE_CANVAS_W, RIDE_CANVAS_H);
+  }
+
+  let cartWX = trackWorldX(prog.col) + (trackWorldX(prog.nextCol) - trackWorldX(prog.col)) * prog.frac;
+  let cartWY = trackWorldY(heights[prog.col]) + (trackWorldY(heights[prog.nextCol]) - trackWorldY(heights[prog.col])) * prog.frac;
+  let slopeAngle = Math.atan2(trackWorldY(heights[prog.nextCol]) - trackWorldY(heights[prog.col]), TRACK_STEP);
+  const looped = applyTrackLoopOverride(cartWX, cartWY, heights, loops);
+  cartWX = looped.x; cartWY = looped.y;
+  if (looped.angle) slopeAngle = looped.angle;
+
+  const cameraX = clampNum(cartWX - RIDE_CANVAS_W / 2, 0, Math.max(0, trackWorldX(heights.length - 1) - RIDE_CANVAS_W + TRACK_STEP));
+  const cameraY = Math.min(0, cartWY - RIDE_CANVAS_H * 0.55);
+
+  ctx.save();
+  ctx.translate(-cameraX, -cameraY);
+
+  ctx.fillStyle = theme.ground;
+  ctx.fillRect(cameraX - 40, TRACK_GROUND_Y + 6, RIDE_CANVAS_W + 80, 200);
+
+  ctx.strokeStyle = theme.track;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  for (let i = 0; i < heights.length - 1; i++){
+    const x1 = trackWorldX(i), y1 = trackWorldY(heights[i]);
+    const x2 = trackWorldX(i + 1), y2 = trackWorldY(heights[i + 1]);
+    if (i === 0) ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+  }
+  ctx.stroke();
+  loops.forEach((isLoop, li) => {
+    if (!isLoop) return;
+    const cx = trackWorldX(li), cy = trackWorldY(heights[li]) - TRACK_LOOP_RADIUS;
+    ctx.beginPath();
+    ctx.arc(cx, cy, TRACK_LOOP_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  // Rattlesnake Rapids-style rafts spin freely as they float, independent
+  // of the track's own slope angle.
+  const vehicleAngle = ride.spinning ? elapsedSec * 2.4 : slopeAngle;
+  drawVehicleWithRiders(ctx, cartWX, cartWY, vehicleAngle, theme.cabin);
+
+  ctx.restore();
+
+  if (inTunnel){
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("🚇 Launching...", RIDE_CANVAS_W / 2, 24);
+  }
+}
+
+// ---- wheel engine: Ferris Wheel ----
+const WHEEL_LAP_SEC = 9;
+function drawWheelRide(ctx, ride, elapsedSec){
+  const grad = ctx.createLinearGradient(0, 0, 0, RIDE_CANVAS_H);
+  grad.addColorStop(0, "#4fc3f7"); grad.addColorStop(1, "#bfe8ff");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, RIDE_CANVAS_W, RIDE_CANVAS_H);
+  ctx.fillStyle = "#8fd68f";
+  ctx.fillRect(0, RIDE_CANVAS_H - 22, RIDE_CANVAS_W, 22);
+
+  const cx = RIDE_CANVAS_W / 2, cy = RIDE_CANVAS_H - 66, radius = 62;
+  const angle = (elapsedSec / WHEEL_LAP_SEC) * Math.PI * 2;
+
+  ctx.strokeStyle = "#ec4899";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++){
+    const a = i * (Math.PI * 2 / 8);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius);
+    ctx.stroke();
+  }
+  const gx = cx + Math.cos(angle - Math.PI / 2) * radius;
+  const gy = cy + Math.sin(angle - Math.PI / 2) * radius;
+  drawVehicleWithRiders(ctx, gx, gy, 0, "#ec4899");
+}
+
+// ---- swing engine: SkyCoaster (winched up, then a big decaying pendulum swing) ----
+const SWING_WINCH_SEC = 3.5, SWING_CYCLE_SEC = 10;
+function drawSwingRide(ctx, ride, elapsedSecRaw){
+  const elapsedSec = elapsedSecRaw % SWING_CYCLE_SEC;
+  const grad = ctx.createLinearGradient(0, 0, 0, RIDE_CANVAS_H);
+  grad.addColorStop(0, "#2b6cb0"); grad.addColorStop(1, "#bfe8ff");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, RIDE_CANVAS_W, RIDE_CANVAS_H);
+  ctx.fillStyle = "#8fd68f";
+  ctx.fillRect(0, RIDE_CANVAS_H - 18, RIDE_CANVAS_W, 18);
+
+  const towerX = RIDE_CANVAS_W / 2, towerTopY = 16, groundY = RIDE_CANVAS_H - 18;
+  ctx.strokeStyle = "#94a3b8";
+  ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(towerX - 60, groundY); ctx.lineTo(towerX - 6, towerTopY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(towerX + 60, groundY); ctx.lineTo(towerX + 6, towerTopY); ctx.stroke();
+
+  const pivotX = towerX, pivotY = towerTopY;
+  const swingLen = groundY - towerTopY - 24;
+  let riderX, riderY;
+  if (elapsedSec < SWING_WINCH_SEC){
+    const p = elapsedSec / SWING_WINCH_SEC;
+    riderX = pivotX;
+    riderY = groundY - p * (groundY - towerTopY - 30);
+  } else {
+    const t = elapsedSec - SWING_WINCH_SEC;
+    const amp = Math.max(0.15, 1.3 - t * 0.18);
+    const theta = Math.sin(t * 1.6) * amp;
+    riderX = pivotX + Math.sin(theta) * swingLen;
+    riderY = pivotY + Math.cos(theta) * swingLen;
+  }
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(pivotX, pivotY); ctx.lineTo(riderX, riderY); ctx.stroke();
+
+  const swingAngle = Math.atan2(riderX - pivotX, riderY - pivotY);
+  drawVehicleWithRiders(ctx, riderX, riderY, swingAngle * 0.6, "#38bdf8");
+}
+
+// ---- drive engine: Wild Kingdom's real train-past-animals loop, Lazy River ----
+function drawDriveRide(ctx, ride, elapsedSec){
+  const isWater = ride.theme === "water";
+  const grad = ctx.createLinearGradient(0, 0, 0, RIDE_CANVAS_H);
+  grad.addColorStop(0, "#bfe8ff"); grad.addColorStop(1, isWater ? "#7ecbe0" : "#bde68a");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, RIDE_CANVAS_W, RIDE_CANVAS_H);
+  ctx.fillStyle = isWater ? "#1d8fc9" : "#7fb955";
+  ctx.fillRect(0, RIDE_CANVAS_H * 0.62, RIDE_CANVAS_W, RIDE_CANVAS_H * 0.4);
+
+  // Wild Kingdom's real ride goes through a tunnel partway around its loop.
+  const cycle = 9;
+  const cyclePos = (elapsedSec % cycle) / cycle;
+  const inTunnel = !!ride.hasTunnel && cyclePos > 0.55 && cyclePos < 0.75;
+  if (inTunnel){
+    ctx.fillStyle = "rgba(10,10,20,0.85)";
+    ctx.fillRect(0, 0, RIDE_CANVAS_W, RIDE_CANVAS_H);
+  }
+
+  const scenery = ride.scenery || ["🌳"];
+  const spacing = 110;
+  const offset = (elapsedSec * 70) % (spacing * scenery.length);
+  ctx.font = "28px sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.globalAlpha = inTunnel ? 0.15 : 1;
+  for (let pass = 0; pass < 2; pass++){
+    scenery.forEach((emo, i) => {
+      const baseX = i * spacing - offset + pass * spacing * scenery.length;
+      if (baseX > -60 && baseX < RIDE_CANVAS_W + 60) ctx.fillText(emo, baseX, RIDE_CANVAS_H * 0.6);
+    });
+  }
+  ctx.globalAlpha = 1;
+
+  drawVehicleWithRiders(ctx, RIDE_CANVAS_W * 0.3, RIDE_CANVAS_H * 0.68, 0, isWater ? "#0d9488" : "#65a30d");
+}
+
+let rideVisualAnimId = null;
+let rideVisualStartPerf = 0;
+let rideCanvasCtx = null;
+function initRideVisual(ride){
+  if (!rideCanvasCtx) rideCanvasCtx = document.getElementById("rideCanvas").getContext("2d");
+  if (ride.engine === "track" && !ride._timeline) ride._timeline = buildRideTimeline(ride.heights);
+  currentNpcRiders = pickNpcRiders();
+  loadPlayerPhotoImage();
+  rideVisualStartPerf = performance.now();
+  if (rideVisualAnimId) cancelAnimationFrame(rideVisualAnimId);
+  rideVisualAnimId = requestAnimationFrame(function frame(){
+    if (currentRide !== ride) return; // navigated away
+    const elapsedSec = (performance.now() - rideVisualStartPerf) / 1000;
+    if (ride.engine === "wheel") drawWheelRide(rideCanvasCtx, ride, elapsedSec);
+    else if (ride.engine === "swing") drawSwingRide(rideCanvasCtx, ride, elapsedSec);
+    else if (ride.engine === "drive") drawDriveRide(rideCanvasCtx, ride, elapsedSec);
+    else drawTrackRide(rideCanvasCtx, ride, elapsedSec);
+    rideVisualAnimId = requestAnimationFrame(frame);
+  });
+}
+function stopRideVisual(){
+  if (rideVisualAnimId) cancelAnimationFrame(rideVisualAnimId);
+  rideVisualAnimId = null;
+}
+
 // ---------- rides ----------
-const RIDES = [
-  { id:"colossus",    name:"Colossus the Fire Dragon", emo:"🐉", color:"#ff5722", category:"coaster", left:"18%", top:"14%" },
-  { id:"wicked",       name:"Wicked",                    emo:"😈", color:"#7c3aed", category:"coaster", left:"50%", top:"8%"  },
-  { id:"cannibal",     name:"Cannibal",                   emo:"💀", color:"#b91c1c", category:"coaster", left:"82%", top:"14%" },
-  { id:"bombora",      name:"Bombora",                     emo:"🌊", color:"#0369a1", category:"coaster", left:"88%", top:"45%" },
-  { id:"rattlesnake",  name:"Rattlesnake Rapids",           emo:"🐍", color:"#16a34a", category:"water",   left:"82%", top:"80%" },
-  { id:"tidalwave",    name:"Tidal Wave",                    emo:"💦", color:"#0284c7", category:"water",   left:"50%", top:"92%" },
-  { id:"skycoaster",   name:"SkyCoaster",                     emo:"🪂", color:"#38bdf8", category:"sky",     left:"18%", top:"80%" },
-  { id:"wildkingdom",  name:"Wild Kingdom",                    emo:"🦁", color:"#65a30d", category:"mild",    left:"12%", top:"45%" },
-  { id:"puff",         name:"Puff the Little Fire Dragon",      emo:"🐲", color:"#fbbf24", category:"mild",    left:"33%", top:"30%" },
-  { id:"ferriswheel",  name:"Ferris Wheel",                      emo:"🎡", color:"#ec4899", category:"mild",    left:"67%", top:"30%" },
+var RIDES = [ // var (not const) so jsdom tests can reach it via window.RIDES
+  // Colossus/Wicked/Cannibal: the exact same researched track data as the
+  // real rides in Coaster Party (Cannibal's RCDB element order, Wicked's
+  // tunnel-launch, Colossus's long wooden-coaster profile).
+  { id:"colossus",   name:"Colossus the Fire Dragon", emo:"🐉", color:"#ff5722", category:"coaster", left:"18%", top:"14%",
+    engine:"track", theme:"coaster", loops:noLoops(32),
+    heights:[2,4,8,14,18,20,19,8,16,6,14,5,12,5,10,5,9,4,8,4,7,4,6,3,5,3,4,3,3,2,2,2] },
+  { id:"wicked",     name:"Wicked", emo:"😈", color:"#7c3aed", category:"coaster", left:"50%", top:"8%",
+    engine:"track", theme:"coaster", loops:noLoops(24), tunnelCols:4,
+    heights:[2,2,2,3,20,19,6,14,5,16,4,11,6,9,4,7,3,5,3,4,2,3,2,2] },
+  { id:"cannibal",   name:"Cannibal", emo:"💀", color:"#b91c1c", category:"coaster", left:"82%", top:"14%",
+    engine:"track", theme:"coaster", loops:loopsAt([7,10,17,20],30),
+    heights:[2,2,20,20,2,5,13,13,4,12,12,5,8,8,6,6,9,9,4,8,8,4,5,3,4,3,3,2,2,2] },
+  // BomBora: real family steel coaster, 45ft tall, 1040ft, 31mph — gentle
+  // rolling hills and turns, no inversions.
+  { id:"bombora",    name:"Bombora", emo:"🌊", color:"#0369a1", category:"coaster", left:"88%", top:"45%",
+    engine:"track", theme:"coaster", loops:noLoops(24),
+    heights:[2,3,5,7,8,6,4,6,8,9,7,5,4,6,7,8,6,4,3,4,5,4,3,2] },
+  // Rattlesnake Rapids: a real spinning raft ride — the raft rotates freely
+  // as it drifts through rising swells and whitewater (pioneer-mine theme).
+  { id:"rattlesnake", name:"Rattlesnake Rapids", emo:"🐍", color:"#16a34a", category:"water", left:"82%", top:"80%",
+    engine:"track", theme:"water", loops:noLoops(22), spinning:true,
+    heights:[3,4,3,5,4,6,4,5,3,4,5,3,4,6,4,5,3,4,3,4,3,3] },
+  // Tidal Wave: a long climb then a real ~70ft near-vertical plunge into a splashdown.
+  { id:"tidalwave",  name:"Tidal Wave", emo:"💦", color:"#0284c7", category:"water", left:"50%", top:"92%",
+    engine:"track", theme:"splash", loops:noLoops(24),
+    heights:[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,20,3,3,4,4] },
+  // SkyCoaster: winched ~150ft up, released, swings like a giant pendulum.
+  { id:"skycoaster", name:"SkyCoaster", emo:"🪂", color:"#38bdf8", category:"sky", left:"18%", top:"80%",
+    engine:"swing" },
+  // Wild Kingdom: the real ride is a train that loops around a lagoon,
+  // through a tunnel, past animal exhibits, and back to the station.
+  { id:"wildkingdom", name:"Wild Kingdom", emo:"🦁", color:"#65a30d", category:"mild", left:"12%", top:"45%",
+    engine:"drive", hasTunnel:true, scenery:["🦁","🦓","🐘","🐫","🦌","🐯","🦬"] },
+  { id:"puff",       name:"Puff the Little Fire Dragon", emo:"🐲", color:"#fbbf24", category:"mild", left:"33%", top:"30%",
+    engine:"track", theme:"coaster", loops:noLoops(15),
+    heights:[2,3,4,5,4,3,4,5,4,3,2,3,4,3,2] },
+  { id:"ferriswheel", name:"Ferris Wheel", emo:"🎡", color:"#ec4899", category:"mild", left:"67%", top:"30%",
+    engine:"wheel" },
 ];
 // Lagoon-A-Beach: its own map of water attractions, reached via the button
 // on the main park screen — reuses the same "water" phase script as
 // Rattlesnake Rapids/Tidal Wave, just a different set of named attractions.
-const BEACH_RIDES = [
-  { id:"wavepool",    name:"Wave Pool",       emo:"🌊", color:"#0ea5e9", category:"water", left:"50%", top:"18%" },
-  { id:"lazyriver",   name:"Lazy River",       emo:"🛟", color:"#0d9488", category:"water", left:"18%", top:"30%" },
-  { id:"twistyslide", name:"Twisty Slide",      emo:"🌀", color:"#7c3aed", category:"water", left:"82%", top:"30%" },
-  { id:"cannonball",  name:"Cannonball Cove",    emo:"🤿", color:"#1d4ed8", category:"water", left:"20%", top:"78%" },
-  { id:"splashzone",  name:"Kiddie Splash Zone",  emo:"🐳", color:"#fbbf24", category:"mild",  left:"80%", top:"78%" },
+var BEACH_RIDES = [ // var (not const) so jsdom tests can reach it via window.BEACH_RIDES
+  { id:"wavepool",    name:"Wave Pool", emo:"🌊", color:"#0ea5e9", category:"water", left:"50%", top:"18%",
+    engine:"track", theme:"water", loops:noLoops(12),
+    heights:[3,4,3,4,3,4,3,4,3,4,3,4] },
+  { id:"lazyriver",   name:"Lazy River", emo:"🛟", color:"#0d9488", category:"water", left:"18%", top:"30%",
+    engine:"drive", theme:"water", scenery:["⛲","🌺","🕳️","🌴","⛲","🌺"] },
+  { id:"twistyslide", name:"Twisty Slide", emo:"🌀", color:"#7c3aed", category:"water", left:"82%", top:"30%",
+    engine:"track", theme:"splash", loops:loopsAt([3,4],10),
+    heights:[2,5,10,15,18,15,10,6,4,2] },
+  { id:"cannonball",  name:"Cannonball Cove", emo:"🤿", color:"#1d4ed8", category:"water", left:"20%", top:"78%",
+    engine:"track", theme:"splash", loops:noLoops(8),
+    heights:[2,4,8,12,16,18,3,3] },
+  { id:"splashzone",  name:"Kiddie Splash Zone", emo:"🐳", color:"#fbbf24", category:"mild", left:"80%", top:"78%",
+    engine:"track", theme:"water", loops:noLoops(7),
+    heights:[2,3,2,3,2,3,2] },
 ];
 const CATEGORY_LABEL = { coaster:"Roller Coaster", water:"Water Ride", sky:"Sky Ride", mild:"Family Ride" };
 
@@ -491,18 +877,8 @@ document.getElementById("goToParkBtn").addEventListener("click", () => {
 });
 
 let rideTimeout = null;
-let currentRide = null;
+var currentRide = null; // var (not let) so jsdom tests can reach it via window.currentRide
 let rideOrigin = "park"; // which map screen to return to when the ride ends
-
-// Shows Oliver's own photo (if he's set one) riding along on the cart —
-// set once per ride start, doesn't change phase to phase since it's just him.
-function renderRideCart(){
-  const cart = document.getElementById("rideCart");
-  const photo = loadMyPhoto();
-  cart.innerHTML = photo
-    ? `<img src="${photo}" alt="Me">`
-    : `<span class="ride-cart-placeholder" id="rideCartPlaceholder">🙂</span>`;
-}
 
 function startRide(ride){
   currentRide = ride;
@@ -511,7 +887,7 @@ function startRide(ride){
   document.getElementById("rideViewName").textContent = ride.name;
   document.getElementById("rideDoneRow").style.display = "none";
   document.getElementById("rideBackBtn").textContent = rideOrigin === "beach" ? "🏖️ Back to Beach" : "🏠 Back to Park";
-  renderRideCart();
+  initRideVisual(ride);
   playPhases(ride);
 }
 
@@ -549,10 +925,12 @@ function playPhases(ride){
 document.getElementById("rideAgainBtn").addEventListener("click", () => {
   if (!currentRide) return;
   document.getElementById("rideDoneRow").style.display = "none";
+  initRideVisual(currentRide);
   playPhases(currentRide);
 });
 document.getElementById("rideBackBtn").addEventListener("click", () => {
   clearTimeout(rideTimeout);
+  stopRideVisual();
   currentRide = null;
   document.getElementById("rideView").classList.remove("shaking");
   showScreen(rideOrigin);
