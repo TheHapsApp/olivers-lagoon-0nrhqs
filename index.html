@@ -132,8 +132,8 @@
     font-size:0.62rem; opacity:0.75; margin-top:4px; text-shadow:1px 1px 0 rgba(0,0,0,0.15); min-height:1em;
   }
   .ride-emo-badge{
-    position:absolute; top:6px; left:8px; font-size:1.6rem; margin-top:0;
-    filter:drop-shadow(0 3px 0 rgba(0,0,0,0.4)); transition:transform 0.15s ease;
+    font-size:1.8rem; margin-bottom:2px;
+    filter:drop-shadow(0 3px 0 rgba(0,0,0,0.3)); transition:transform 0.15s ease;
   }
   .ride-emo-badge.screaming{animation:emoScream 0.22s ease-in-out infinite;}
   @keyframes emoScream{
@@ -218,10 +218,10 @@
     <div class="ride-view" id="rideView">
       <div class="ride-view-name" id="rideViewName">Ride Name</div>
       <div class="ride-scene">
+        <div class="ride-emo-badge" id="rideBigEmo">🎢</div>
         <div class="ride-canvas-wrap" id="rideCanvasWrap">
           <img class="ride-photo-bg" id="ridePhotoBg" alt="">
           <canvas id="rideCanvas" width="380" height="190"></canvas>
-          <div class="ride-emo-badge" id="rideBigEmo">🎢</div>
         </div>
         <div class="ride-video-wrap" id="rideVideoWrap" style="display:none;">
           <img class="video-thumb" id="rideVideoThumb" alt="">
@@ -793,6 +793,7 @@ function initRideVisual(ride){
   const videoThumbEl = document.getElementById("rideVideoThumb");
   const playBtnEl = document.getElementById("videoPlayBtn");
   const creditEl = document.getElementById("photoCredit");
+  const badgeEl = document.getElementById("rideBigEmo");
 
   // A real video takes priority over everything else — it's the most
   // authentic option, so the drawn/photo canvas visuals aren't shown at all
@@ -800,9 +801,13 @@ function initRideVisual(ride){
   // video ride; the video plays at its own pace with normal YouTube controls.
   // The video itself isn't loaded until the kid taps the play button — until
   // then this just shows a real thumbnail with a big obvious play button.
+  // The little phase-emoji badge is hidden entirely for a video ride — it's
+  // driven by playPhases(), which doesn't run for video rides, and the kid
+  // asked for nothing else on screen besides the real ride footage itself.
   if (ride.youtubeId){
     canvasWrapEl.style.display = "none";
     videoWrapEl.style.display = "block";
+    badgeEl.style.display = "none";
     videoFrameEl.src = "";
     videoFrameEl.style.display = "none";
     videoThumbEl.src = youtubeThumbUrl(ride.youtubeId);
@@ -813,6 +818,7 @@ function initRideVisual(ride){
   }
   canvasWrapEl.style.display = "";
   videoWrapEl.style.display = "none";
+  badgeEl.style.display = "";
   videoFrameEl.src = "";
   videoThumbEl.classList.remove("show");
   playBtnEl.classList.remove("show");
