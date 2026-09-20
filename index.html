@@ -118,6 +118,16 @@
     border:4px solid #fff; box-shadow:0 6px 0 rgba(0,0,0,0.3); background:#000;
   }
   .ride-video-wrap iframe{position:absolute; inset:0; width:100%; height:100%; border:0;}
+  .video-thumb{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none;}
+  .video-thumb.show{display:block;}
+  .video-play-btn{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:2; display:none;
+    width:72px; height:72px; border-radius:50%; border:5px solid #fff; background:#ff5c5c; color:#fff;
+    font-size:1.8rem; cursor:pointer; box-shadow:0 6px 0 rgba(0,0,0,0.35); transition:transform .08s ease;
+    align-items:center; justify-content:center; padding-left:6px;
+  }
+  .video-play-btn.show{display:flex;}
+  .video-play-btn:active{transform:translate(-50%,-50%) translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,0.35);}
   .photo-credit{
     font-size:0.62rem; opacity:0.75; margin-top:4px; text-shadow:1px 1px 0 rgba(0,0,0,0.15); min-height:1em;
   }
@@ -214,8 +224,10 @@
           <div class="ride-emo-badge" id="rideBigEmo">🎢</div>
         </div>
         <div class="ride-video-wrap" id="rideVideoWrap" style="display:none;">
-          <iframe id="rideVideoFrame" src="" title="Real ride video" frameborder="0"
-            allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <img class="video-thumb" id="rideVideoThumb" alt="">
+          <button class="video-play-btn" id="videoPlayBtn">▶️</button>
+          <iframe id="rideVideoFrame" src="" title="Real ride video" frameborder="0" style="display:none;"
+            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
         </div>
         <div class="photo-credit" id="photoCredit"></div>
       </div>
@@ -763,30 +775,47 @@ let rideVisualStartPerf = 0;
 let rideCanvasCtx = null;
 // Builds a privacy-friendly (youtube-nocookie.com) embed URL for a ride's
 // real on-ride video. rel=0 cuts down on unrelated suggested videos.
-function youtubeEmbedUrl(youtubeId){
-  return "https://www.youtube-nocookie.com/embed/" + youtubeId + "?rel=0";
+// autoplay=1 only matters once this loads from a genuine tap on the play
+// button — browsers block autoplay otherwise, so it wouldn't do anything if
+// set at ride-start time before the kid has actually interacted with it.
+function youtubeEmbedUrl(youtubeId, autoplay){
+  return "https://www.youtube-nocookie.com/embed/" + youtubeId + "?rel=0" + (autoplay ? "&autoplay=1" : "");
+}
+// A real, reliable thumbnail image for a YouTube video, no API/key needed.
+function youtubeThumbUrl(youtubeId){
+  return "https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg";
 }
 
 function initRideVisual(ride){
   const canvasWrapEl = document.getElementById("rideCanvasWrap");
   const videoWrapEl = document.getElementById("rideVideoWrap");
   const videoFrameEl = document.getElementById("rideVideoFrame");
+  const videoThumbEl = document.getElementById("rideVideoThumb");
+  const playBtnEl = document.getElementById("videoPlayBtn");
   const creditEl = document.getElementById("photoCredit");
 
   // A real video takes priority over everything else — it's the most
   // authentic option, so the drawn/photo canvas visuals aren't shown at all
   // when one's available. No phase-timer animation loop is started for a
   // video ride; the video plays at its own pace with normal YouTube controls.
+  // The video itself isn't loaded until the kid taps the play button — until
+  // then this just shows a real thumbnail with a big obvious play button.
   if (ride.youtubeId){
     canvasWrapEl.style.display = "none";
     videoWrapEl.style.display = "block";
-    videoFrameEl.src = youtubeEmbedUrl(ride.youtubeId);
+    videoFrameEl.src = "";
+    videoFrameEl.style.display = "none";
+    videoThumbEl.src = youtubeThumbUrl(ride.youtubeId);
+    videoThumbEl.classList.add("show");
+    playBtnEl.classList.add("show");
     creditEl.textContent = ride.youtubeCredit || "";
     return;
   }
   canvasWrapEl.style.display = "";
   videoWrapEl.style.display = "none";
   videoFrameEl.src = "";
+  videoThumbEl.classList.remove("show");
+  playBtnEl.classList.remove("show");
 
   if (!rideCanvasCtx) rideCanvasCtx = document.getElementById("rideCanvas").getContext("2d");
   if (ride.engine === "track" && !ride._timeline) ride._timeline = buildRideTimeline(ride.heights);
@@ -1031,6 +1060,15 @@ function playPhases(ride){
   step();
 }
 
+document.getElementById("videoPlayBtn").addEventListener("click", () => {
+  if (!currentRide || !currentRide.youtubeId) return;
+  tone(600, 0, 0.1, "triangle", 0.1);
+  document.getElementById("rideVideoThumb").classList.remove("show");
+  document.getElementById("videoPlayBtn").classList.remove("show");
+  const videoFrameEl = document.getElementById("rideVideoFrame");
+  videoFrameEl.style.display = "block";
+  videoFrameEl.src = youtubeEmbedUrl(currentRide.youtubeId, true); // a real tap just happened, so autoplay is allowed
+});
 document.getElementById("rideAgainBtn").addEventListener("click", () => {
   if (!currentRide) return;
   document.getElementById("rideDoneRow").style.display = "none";
